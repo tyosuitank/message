@@ -2,38 +2,69 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>吹き出しメモアプリ</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       font-family: sans-serif;
       background: #f4f4f4;
       padding: 20px;
-      max-width: 600px;
-      margin: 0 auto;
+      margin: 0;
+      max-width: 700px;
+      margin-inline: auto;
     }
+
     #inputArea {
       margin-bottom: 20px;
     }
+
     textarea {
       width: 100%;
-      padding: 10px;
+      padding: 12px;
       font-size: 16px;
       border-radius: 8px;
       border: 1px solid #ccc;
-      resize: none;
+      resize: vertical;
+      box-sizing: border-box;
+      line-height: 1.5;
     }
+
     .bubble {
       background: white;
       border: 1px solid #ccc;
       border-radius: 16px;
-      padding: 10px 15px;
+      padding: 12px 16px;
       margin: 10px 0;
       position: relative;
       cursor: pointer;
       transition: background 0.3s;
+      word-wrap: break-word;
+      font-size: 16px;
     }
+
     .bubble:hover {
       background: #f9f9f9;
+    }
+
+    /* スマホ向け調整 */
+    @media screen and (max-width: 600px) {
+      body {
+        padding: 16px;
+      }
+
+      textarea {
+        font-size: 18px;
+        padding: 14px;
+      }
+
+      .bubble {
+        font-size: 17px;
+        padding: 14px;
+      }
     }
   </style>
 </head>
@@ -47,17 +78,13 @@
     const input = document.getElementById("textInput");
     const container = document.getElementById("bubbleContainer");
     let lastEnterTime = 0;
-
-    // 💾 保存用キー
     const STORAGE_KEY = "bubbles";
 
-    // 🔄 吹き出しを保存
     function saveBubbles() {
       const texts = Array.from(container.children).map(div => div.textContent);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(texts));
     }
 
-    // 📤 吹き出しを読み込み
     function loadBubbles() {
       const data = localStorage.getItem(STORAGE_KEY);
       if (!data) return;
@@ -65,7 +92,6 @@
       texts.forEach(text => createBubble(text));
     }
 
-    // 💬 吹き出しを作成して追加
     function createBubble(text) {
       const div = document.createElement("div");
       div.className = "bubble";
@@ -79,13 +105,12 @@
         } else {
           this.textContent = newText;
         }
-        saveBubbles(); // 編集・削除後に保存
+        saveBubbles();
       };
 
       container.appendChild(div);
     }
 
-    // ➕ 追加処理（新規吹き出し）
     function addBubble() {
       const text = input.value.trim();
       if (text === "") return;
@@ -93,22 +118,20 @@
       createBubble(text);
       input.value = "";
       input.focus();
-      saveBubbles(); // 保存
+      saveBubbles();
     }
 
-    // ⌨️ Enter2回で投稿（1回目は改行）
     input.addEventListener("keydown", function (event) {
       if (event.key === "Enter") {
         const now = Date.now();
         if (now - lastEnterTime < 500) {
-          event.preventDefault(); // 改行をキャンセル
+          event.preventDefault(); // 改行キャンセル
           addBubble();
         }
         lastEnterTime = now;
       }
     });
 
-    // 🔁 初期読み込み
     loadBubbles();
   </script>
 </body>
