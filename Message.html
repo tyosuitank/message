@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>吹き出しメモアプリ</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f4f4f4;
+      padding: 20px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    #inputArea {
+      margin-bottom: 20px;
+    }
+    textarea {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      resize: none;
+    }
+    .bubble {
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 16px;
+      padding: 10px 15px;
+      margin: 10px 0;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .bubble:hover {
+      background: #f9f9f9;
+    }
+  </style>
+</head>
+<body>
+  <div id="inputArea">
+    <textarea id="textInput" rows="2" placeholder="考えてることを書いてね（Enter2回で送信）"></textarea>
+  </div>
+  <div id="bubbleContainer"></div>
+
+  <script>
+    const input = document.getElementById("textInput");
+    let lastEnterTime = 0;
+
+    function addBubble() {
+      const text = input.value.trim();
+      if (text === "") return;
+
+      const div = document.createElement("div");
+      div.className = "bubble";
+      div.textContent = text;
+
+      // クリックで編集 or 削除
+      div.onclick = function () {
+        const newText = prompt("編集するか空にすると削除されます", this.textContent);
+        if (newText === null) return;
+        if (newText.trim() === "") {
+          this.remove();
+        } else {
+          this.textContent = newText;
+        }
+      };
+
+      document.getElementById("bubbleContainer").appendChild(div);
+      input.value = "";
+      input.focus(); // 再度フォーカス
+    }
+
+    // Enter2回で送信（1回目は改行）
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        const now = Date.now();
+        if (now - lastEnterTime < 500) { // 0.5秒以内の連続Enterで送信
+          event.preventDefault(); // 改行キャンセル
+          addBubble();
+        }
+        lastEnterTime = now;
+      }
+    });
+  </script>
+</body>
+</html>
