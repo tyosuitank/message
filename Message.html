@@ -45,17 +45,32 @@
 
   <script>
     const input = document.getElementById("textInput");
+    const container = document.getElementById("bubbleContainer");
     let lastEnterTime = 0;
 
-    function addBubble() {
-      const text = input.value.trim();
-      if (text === "") return;
+    // 💾 保存用キー
+    const STORAGE_KEY = "bubbles";
 
+    // 🔄 吹き出しを保存
+    function saveBubbles() {
+      const texts = Array.from(container.children).map(div => div.textContent);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(texts));
+    }
+
+    // 📤 吹き出しを読み込み
+    function loadBubbles() {
+      const data = localStorage.getItem(STORAGE_KEY);
+      if (!data) return;
+      const texts = JSON.parse(data);
+      texts.forEach(text => createBubble(text));
+    }
+
+    // 💬 吹き出しを作成して追加
+    function createBubble(text) {
       const div = document.createElement("div");
       div.className = "bubble";
       div.textContent = text;
 
-      // クリックで編集 or 削除
       div.onclick = function () {
         const newText = prompt("編集するか空にすると削除されます", this.textContent);
         if (newText === null) return;
@@ -64,24 +79,37 @@
         } else {
           this.textContent = newText;
         }
+        saveBubbles(); // 編集・削除後に保存
       };
 
-      document.getElementById("bubbleContainer").appendChild(div);
-      input.value = "";
-      input.focus(); // 再度フォーカス
+      container.appendChild(div);
     }
 
-    // Enter2回で送信（1回目は改行）
+    // ➕ 追加処理（新規吹き出し）
+    function addBubble() {
+      const text = input.value.trim();
+      if (text === "") return;
+
+      createBubble(text);
+      input.value = "";
+      input.focus();
+      saveBubbles(); // 保存
+    }
+
+    // ⌨️ Enter2回で投稿（1回目は改行）
     input.addEventListener("keydown", function (event) {
       if (event.key === "Enter") {
         const now = Date.now();
-        if (now - lastEnterTime < 500) { // 0.5秒以内の連続Enterで送信
-          event.preventDefault(); // 改行キャンセル
+        if (now - lastEnterTime < 500) {
+          event.preventDefault(); // 改行をキャンセル
           addBubble();
         }
         lastEnterTime = now;
       }
     });
+
+    // 🔁 初期読み込み
+    loadBubbles();
   </script>
 </body>
 </html>
