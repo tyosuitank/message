@@ -132,20 +132,6 @@
       margin: 4px 0;
     }
 
-    /* 履歴 */
-    .dayHeader {
-      margin-top: 20px;
-      font-weight: bold;
-    }
-    .historyBubble {
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 16px;
-      padding: 8px 12px;
-      margin: 6px 0;
-      word-wrap: break-word;
-      font-size: 14px;
-    }
   </style>
 </head>
 <body>
@@ -163,8 +149,9 @@
     </div>
   </div>
 
-  <h2 style="margin-top:40px;">過去の思考</h2>
-  <div id="history"></div>
+  <div style="margin-top:40px;">
+    <a href="history.html">▶ View past records</a>
+  </div>
 
   <!-- モーダル -->
   <div id="modal">
@@ -188,7 +175,6 @@
   <script>
     const input = document.getElementById("textInput");
     const container = document.getElementById("bubbleContainer");
-    const historyDiv = document.getElementById("history");
     let lastEnterTime = 0;
     const MEMO_PREFIX = "memo-";
     const LAST_DATE_KEY = "last-open-date";
@@ -209,7 +195,6 @@
         continued: div.dataset.continued === "true"
       }));
       localStorage.setItem(getStorageKey(), JSON.stringify(data));
-      renderHistory();
     }
 
     function saveComments(id, comments) {
@@ -332,28 +317,6 @@
       renderComments();
     }
 
-    function renderHistory() {
-      historyDiv.innerHTML = "";
-      const keys = Object.keys(localStorage)
-        .filter(k => k.startsWith(MEMO_PREFIX))
-        .sort()
-        .reverse();
-      keys.forEach(key => {
-        const date = key.slice(MEMO_PREFIX.length);
-        const items = JSON.parse(localStorage.getItem(key) || "[]");
-        if (!items.length) return;
-        const header = document.createElement("div");
-        header.className = "dayHeader";
-        header.textContent = date;
-        historyDiv.appendChild(header);
-        items.forEach(({ text }) => {
-          const div = document.createElement("div");
-          div.className = "historyBubble";
-          div.textContent = text;
-          historyDiv.appendChild(div);
-        });
-      });
-    }
 
     function showCarryover(list) {
       const area = document.getElementById("carryoverList");
@@ -387,7 +350,6 @@
     localStorage.setItem(LAST_DATE_KEY, today);
 
     loadBubbles();
-    renderHistory();
   </script>
 </body>
 </html>
