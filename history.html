@@ -32,34 +32,79 @@
   <h2>過去の思考</h2>
   <div id="history"></div>
 
-  <script>
-    const MEMO_PREFIX = "memo-";
+    <script>
+      const DB_NAME = "thoughtsDB";
+      const STORE_NAME = "thoughts";
+      const MEMO_PREFIX = "memo-";
 
-    function renderHistory() {
-      const historyDiv = document.getElementById("history");
-      historyDiv.innerHTML = "";
-      const keys = Object.keys(localStorage)
-        .filter(k => k.startsWith(MEMO_PREFIX))
-        .sort()
-        .reverse();
-      keys.forEach(key => {
-        const date = key.slice(MEMO_PREFIX.length);
-        const items = JSON.parse(localStorage.getItem(key) || "[]");
-        if (!items.length) return;
-        const header = document.createElement("div");
-        header.className = "dayHeader";
-        header.textContent = date;
-        historyDiv.appendChild(header);
-        items.forEach(({ text }) => {
-          const div = document.createElement("div");
-          div.className = "historyBubble";
-          div.textContent = text;
-          historyDiv.appendChild(div);
-        });
+      const dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = e => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME);
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
       });
-    }
 
-    document.addEventListener("DOMContentLoaded", renderHistory);
-  </script>
+      function getAllThoughts() {
+        return dbPromise.then(db => new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readonly");
+          const store = tx.objectStore(STORE_NAME);
+          const data = {};
+          store.openCursor().onsuccess = e => {
+            const cursor = e.target.result;
+            if (cursor) {
+              data[cursor.key] = cursor.value;
+              cursor.continue();
+            } else {
+              resolve(data);
+            }
+          };
+          tx.onerror = () => reject(tx.error);
+        }));
+      }
+
+      async function migrateFromLocalStorage() {
+        const keys = Object.keys(localStorage).filter(k => k.startsWith(MEMO_PREFIX));
+        for (const key of keys) {
+          const date = key.slice(MEMO_PREFIX.length);
+          const value = JSON.parse(localStorage.getItem(key) || "[]");
+          const db = await dbPromise;
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          tx.objectStore(STORE_NAME).put(value, date);
+          await new Promise(r => (tx.oncomplete = r));
+          localStorage.removeItem(key);
+        }
+      }
+
+      async function renderHistory() {
+        await migrateFromLocalStorage();
+        const historyDiv = document.getElementById("history");
+        historyDiv.innerHTML = "";
+        const all = await getAllThoughts();
+        Object.keys(all)
+          .sort()
+          .reverse()
+          .forEach(date => {
+            const items = all[date];
+            if (!items.length) return;
+            const header = document.createElement("div");
+            header.className = "dayHeader";
+            header.textContent = date;
+            historyDiv.appendChild(header);
+            items.forEach(({ text }) => {
+              const div = document.createElement("div");
+              div.className = "historyBubble";
+              div.textContent = text;
+              historyDiv.appendChild(div);
+            });
+          });
+      }
+
+      document.addEventListener("DOMContentLoaded", renderHistory);
+    </script>
 </body>
 </html>
