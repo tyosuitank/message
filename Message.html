@@ -108,6 +108,44 @@
       cursor: pointer;
       margin-left: 10px;
     }
+
+    /* 引き継ぎモーダル */
+    #carryoverModal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #00000088;
+      z-index: 1000;
+    }
+    #carryoverContent {
+      background: white;
+      padding: 20px;
+      margin: 60px auto;
+      max-width: 500px;
+      border-radius: 12px;
+    }
+    #carryoverList label {
+      display: block;
+      margin: 4px 0;
+    }
+
+    /* 履歴 */
+    .dayHeader {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+    .historyBubble {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 16px;
+      padding: 8px 12px;
+      margin: 6px 0;
+      word-wrap: break-word;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -115,6 +153,18 @@
     <textarea id="textInput" rows="2" placeholder="考えてることを書いてね（Enter2回で送信）"></textarea>
   </div>
   <div id="bubbleContainer"></div>
+
+  <!-- 引き継ぎモーダル -->
+  <div id="carryoverModal">
+    <div id="carryoverContent">
+      <h3>昨日の考えてたこと</h3>
+      <div id="carryoverList"></div>
+      <button onclick="confirmCarryover()">今日に引き継ぐ</button>
+    </div>
+  </div>
+
+  <h2 style="margin-top:40px;">過去の思考</h2>
+  <div id="history"></div>
 
   <!-- モーダル -->
   <div id="modal">
@@ -138,19 +188,28 @@
   <script>
     const input = document.getElementById("textInput");
     const container = document.getElementById("bubbleContainer");
+    const historyDiv = document.getElementById("history");
     let lastEnterTime = 0;
-    const STORAGE_KEY = "bubbles";
+    const MEMO_PREFIX = "memo-";
+    const LAST_DATE_KEY = "last-open-date";
     const COMMENT_KEY = "comments";
     let currentBubble = null;
     let currentId = null;
+    const today = new Date().toISOString().slice(0, 10);
+
+    function getStorageKey(date = today) {
+      return MEMO_PREFIX + date;
+    }
 
     // 保存
     function saveBubbles() {
       const data = Array.from(container.children).map(div => ({
         id: div.dataset.id,
-        text: div.textContent
+        text: div.textContent,
+        continued: div.dataset.continued === "true"
       }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(getStorageKey(), JSON.stringify(data));
+      renderHistory();
     }
 
     function saveComments(id, comments) {
@@ -160,17 +219,18 @@
     }
 
     // 読み込み
-    function loadBubbles() {
-      const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-      data.forEach(({ id, text }) => createBubble(id, text));
+    function loadBubbles(date = today) {
+      const data = JSON.parse(localStorage.getItem(getStorageKey(date)) || "[]");
+      data.forEach(({ id, text, continued }) => createBubble(id, text, continued));
     }
 
     // 吹き出し生成
-    function createBubble(id, text) {
+    function createBubble(id, text, continued = false) {
       const div = document.createElement("div");
       div.className = "bubble";
       div.textContent = text;
       div.dataset.id = id;
+      div.dataset.continued = continued;
 
       div.onclick = function () {
         openModal(this);
@@ -180,14 +240,16 @@
     }
 
     // 吹き出し追加
-    function addBubble() {
-      const text = input.value.trim();
-      if (text === "") return;
-      const id = "id-" + Date.now(); // ユニークID
+    function addBubble(text = null, continued = false) {
+      const inputText = text !== null ? text : input.value.trim();
+      if (inputText === "") return;
+      const id = "id-" + Date.now() + Math.random().toString(36).slice(2, 5);
 
-      createBubble(id, text);
-      input.value = "";
-      input.focus();
+      createBubble(id, inputText, continued);
+      if (text === null) {
+        input.value = "";
+        input.focus();
+      }
       saveBubbles();
     }
 
@@ -270,8 +332,62 @@
       renderComments();
     }
 
+    function renderHistory() {
+      historyDiv.innerHTML = "";
+      const keys = Object.keys(localStorage)
+        .filter(k => k.startsWith(MEMO_PREFIX))
+        .sort()
+        .reverse();
+      keys.forEach(key => {
+        const date = key.slice(MEMO_PREFIX.length);
+        const items = JSON.parse(localStorage.getItem(key) || "[]");
+        if (!items.length) return;
+        const header = document.createElement("div");
+        header.className = "dayHeader";
+        header.textContent = date;
+        historyDiv.appendChild(header);
+        items.forEach(({ text }) => {
+          const div = document.createElement("div");
+          div.className = "historyBubble";
+          div.textContent = text;
+          historyDiv.appendChild(div);
+        });
+      });
+    }
+
+    function showCarryover(list) {
+      const area = document.getElementById("carryoverList");
+      area.innerHTML = "";
+      list.forEach(({ text }) => {
+        const label = document.createElement("label");
+        const chk = document.createElement("input");
+        chk.type = "checkbox";
+        chk.value = text;
+        label.appendChild(chk);
+        label.appendChild(document.createTextNode(" " + text));
+        area.appendChild(label);
+      });
+      document.getElementById("carryoverModal").style.display = "block";
+    }
+
+    function confirmCarryover() {
+      document.querySelectorAll("#carryoverList input:checked").forEach(el => {
+        addBubble(el.value, true);
+      });
+      document.getElementById("carryoverModal").style.display = "none";
+    }
+
     // 初期化
+    const lastOpen = localStorage.getItem(LAST_DATE_KEY);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    if (lastOpen !== today) {
+      const yData = JSON.parse(localStorage.getItem(getStorageKey(yesterday)) || "[]");
+      if (yData.length) showCarryover(yData);
+    }
+    localStorage.setItem(LAST_DATE_KEY, today);
+
     loadBubbles();
+    renderHistory();
   </script>
 </body>
 </html>
