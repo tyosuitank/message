@@ -36,29 +36,62 @@
     <script>
       const DB_NAME = "thoughtsDB";
       const STORE_NAME = "thoughts";
+      const BRANCH_STORE = "branches";
       const MEMO_PREFIX = "memo-";
+      const DB_VERSION = 2;
 
       const dbPromise = new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 1);
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
         req.onupgradeneeded = e => {
           const db = e.target.result;
-          if (!db.objectStoreNames.contains(STORE_NAME)) {
-            db.createObjectStore(STORE_NAME);
+          if (e.oldVersion < 1) {
+            db.createObjectStore(STORE_NAME, { keyPath: "id" });
+            db.createObjectStore(BRANCH_STORE, { keyPath: "id" });
+          } else if (e.oldVersion === 1) {
+            const oldStore = e.target.transaction.objectStore(STORE_NAME);
+            const data = {};
+            oldStore.openCursor().onsuccess = ev => {
+              const cursor = ev.target.result;
+              if (cursor) {
+                data[cursor.key] = cursor.value;
+                cursor.continue();
+              } else {
+                db.deleteObjectStore(STORE_NAME);
+                const newStore = db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                db.createObjectStore(BRANCH_STORE, { keyPath: "id" });
+                const commentsAll = JSON.parse(localStorage.getItem("comments") || "{}");
+                for (const [date, arr] of Object.entries(data)) {
+                  arr.forEach(({ id, text, continued }) => {
+                    newStore.add({
+                      id,
+                      type: "seed",
+                      text,
+                      continued: !!continued,
+                      callCount: 1,
+                      appearedOn: [date],
+                      comments: commentsAll[id] || [],
+                      branchId: null,
+                      treeId: null
+                    });
+                  });
+                }
+              }
+            };
           }
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       });
 
-      function getAllThoughts() {
+      function getAllSeeds() {
         return dbPromise.then(db => new Promise((resolve, reject) => {
           const tx = db.transaction(STORE_NAME, "readonly");
           const store = tx.objectStore(STORE_NAME);
-          const data = {};
+          const data = [];
           store.openCursor().onsuccess = e => {
             const cursor = e.target.result;
             if (cursor) {
-              data[cursor.key] = cursor.value;
+              data.push(cursor.value);
               cursor.continue();
             } else {
               resolve(data);
@@ -68,29 +101,57 @@
         }));
       }
 
+      function saveSeed(seed) {
+        return dbPromise.then(db => new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          tx.objectStore(STORE_NAME).put(seed);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        }));
+      }
+
       async function migrateFromLocalStorage() {
         const keys = Object.keys(localStorage).filter(k => k.startsWith(MEMO_PREFIX));
+        const commentsAll = JSON.parse(localStorage.getItem("comments") || "{}");
         for (const key of keys) {
           const date = key.slice(MEMO_PREFIX.length);
           const value = JSON.parse(localStorage.getItem(key) || "[]");
-          const db = await dbPromise;
-          const tx = db.transaction(STORE_NAME, "readwrite");
-          tx.objectStore(STORE_NAME).put(value, date);
-          await new Promise(r => (tx.oncomplete = r));
+          for (const { id, text, continued } of value) {
+            const seed = {
+              id,
+              type: "seed",
+              text,
+              continued: !!continued,
+              callCount: 1,
+              appearedOn: [date],
+              comments: commentsAll[id] || [],
+              branchId: null,
+              treeId: null
+            };
+            await saveSeed(seed);
+          }
           localStorage.removeItem(key);
         }
+        localStorage.removeItem("comments");
       }
 
       async function renderHistory() {
         await migrateFromLocalStorage();
         const historyDiv = document.getElementById("history");
         historyDiv.innerHTML = "";
-        const all = await getAllThoughts();
-        Object.keys(all)
+        const seeds = await getAllSeeds();
+        const map = {};
+        seeds.forEach(seed => {
+          seed.appearedOn.forEach(d => {
+            if (!map[d]) map[d] = [];
+            map[d].push(seed);
+          });
+        });
+        Object.keys(map)
           .sort()
           .reverse()
           .forEach(date => {
-            const items = all[date];
+            const items = map[date];
             if (!items.length) return;
             const header = document.createElement("div");
             header.className = "dayHeader";
