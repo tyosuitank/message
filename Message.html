@@ -249,7 +249,12 @@
     });
     let currentBubble = null;
     let currentId = null;
-    const today = new Date().toISOString().slice(0, 10);
+
+    function getToday() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    let today = getToday();
 
     function getStorageKey(date = today) {
       return MEMO_PREFIX + date;
@@ -625,19 +630,37 @@
       reader.readAsText(file);
     }
 
+    // 日付変更処理
+    async function startNewDay(prevDate) {
+      container.innerHTML = "";
+      input.value = "";
+      await loadBubbles();
+      const yData = await getSeedsByDate(prevDate);
+      if (yData.length) showCarryover(yData);
+      localStorage.setItem(LAST_DATE_KEY, today);
+    }
+
+    async function checkNewDay() {
+      const now = getToday();
+      if (now !== today) {
+        const prev = today;
+        today = now;
+        await startNewDay(prev);
+      }
+    }
+
     // 初期化
     (async function () {
       await migrateFromLocalStorage();
       const lastOpen = localStorage.getItem(LAST_DATE_KEY);
-      const yesterday = new Date(Date.now() - 86400000)
-        .toISOString()
-        .slice(0, 10);
-      if (lastOpen !== today) {
-        const yData = await getSeedsByDate(yesterday);
-        if (yData.length) showCarryover(yData);
+      if (lastOpen && lastOpen !== today) {
+        await startNewDay(lastOpen);
+      } else {
+        localStorage.setItem(LAST_DATE_KEY, today);
+        await loadBubbles();
       }
-      localStorage.setItem(LAST_DATE_KEY, today);
-      await loadBubbles();
+      setInterval(checkNewDay, 60000);
+      window.addEventListener("focus", checkNewDay);
     })();
   </script>
 </body>
