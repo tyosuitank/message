@@ -110,6 +110,20 @@
       margin-left: 10px;
     }
 
+    /* Suggestions */
+    #suggestions {
+      margin-top: 4px;
+    }
+    .suggestion {
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 6px;
+      margin-top: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
     /* 引き継ぎモーダル */
     #carryoverModal {
       display: none;
@@ -138,6 +152,7 @@
 <body>
   <div id="inputArea">
     <textarea id="textInput" rows="2" placeholder="考えてることを書いてね（Enter2回で送信）"></textarea>
+    <div id="suggestions"></div>
   </div>
   <div id="bubbleContainer"></div>
 
@@ -179,6 +194,7 @@
   <script>
     const input = document.getElementById("textInput");
     const container = document.getElementById("bubbleContainer");
+    const suggestionBox = document.getElementById("suggestions");
     let lastEnterTime = 0;
     const MEMO_PREFIX = "memo-";
     const LAST_DATE_KEY = "last-open-date";
@@ -240,6 +256,38 @@
       }));
     }
 
+    async function searchThoughts(query) {
+      const q = query.toLowerCase();
+      const all = await getAllThoughts();
+      const result = [];
+      for (const [date, arr] of Object.entries(all)) {
+        arr.forEach(({ text }) => {
+          if (text.toLowerCase().includes(q)) {
+            result.push({ date, text });
+          }
+        });
+      }
+      result.sort((a, b) => b.date.localeCompare(a.date));
+      return result.slice(0, 5);
+    }
+
+    function renderSuggestions(list, query) {
+      suggestionBox.innerHTML = "";
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const reg = new RegExp(escaped, "gi");
+      list.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "suggestion";
+        const highlighted = item.text.replace(reg, m => `<mark>${m}</mark>`);
+        div.innerHTML = `<small>${item.date}</small> ${highlighted}`;
+        div.onclick = () => {
+          addBubble(item.text);
+          suggestionBox.innerHTML = "";
+        };
+        suggestionBox.appendChild(div);
+      });
+    }
+
     async function migrateFromLocalStorage() {
       const keys = Object.keys(localStorage).filter(k => k.startsWith(MEMO_PREFIX));
       for (const key of keys) {
@@ -288,21 +336,36 @@
     }
 
     // 吹き出し追加
-    function addBubble(text = null, continued = false) {
-      const inputText = text !== null ? text : input.value.trim();
-      if (inputText === "") return;
-      const id = "id-" + Date.now() + Math.random().toString(36).slice(2, 5);
+  function addBubble(text = null, continued = false) {
+    const inputText = text !== null ? text : input.value.trim();
+    if (inputText === "") return;
+    const id = "id-" + Date.now() + Math.random().toString(36).slice(2, 5);
 
-      createBubble(id, inputText, continued);
-      if (text === null) {
-        input.value = "";
-        input.focus();
-      }
-      saveBubbles();
+    createBubble(id, inputText, continued);
+    if (text === null) {
+      input.value = "";
+      input.focus();
+      suggestionBox.innerHTML = "";
     }
+    saveBubbles();
+  }
 
-    // Enter2回で送信
-    input.addEventListener("keydown", function (event) {
+  input.addEventListener("input", async function () {
+    const query = input.value.trim();
+    if (!query) {
+      suggestionBox.innerHTML = "";
+      return;
+    }
+    const matches = await searchThoughts(query);
+    if (matches.length) {
+      renderSuggestions(matches, query);
+    } else {
+      suggestionBox.innerHTML = "";
+    }
+  });
+
+  // Enter2回で送信
+  input.addEventListener("keydown", function (event) {
       if (event.key === "Enter") {
         const now = Date.now();
         if (now - lastEnterTime < 500) {
