@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.PNG">
+  <title>Branch Editor</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f4f4f4;
+      padding: 20px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    #seedList {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: #fff;
+      border-radius: 8px;
+    }
+    #seedList label {
+      display: block;
+      margin: 4px 0;
+      font-size: 14px;
+    }
+    #selectedSeeds {
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    #confirm {
+      color: green;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Branch Editor</h2>
+  <div id="seedList"></div>
+  <div id="selectedSeeds"></div>
+  <div style="margin-top:15px;">
+    <input type="text" id="branchName" placeholder="Branch name" />
+    <button id="createBranch">Create Branch</button>
+  </div>
+  <div id="confirm" style="display:none;">Branch created!</div>
+  <div style="margin-top:20px;"><a href="Message.html">⬅ Back</a></div>
+
+  <script>
+    const DB_NAME = "thoughtsDB";
+    const STORE_NAME = "thoughts";
+    const BRANCH_STORE = "branches";
+    const MEMO_PREFIX = "memo-";
+    const COMMENT_KEY = "comments";
+    const DB_VERSION = 2;
+
+    const dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (e.oldVersion < 1) {
+          db.createObjectStore(STORE_NAME, { keyPath: "id" });
+          db.createObjectStore(BRANCH_STORE, { keyPath: "id" });
+        } else if (e.oldVersion === 1) {
+          const oldStore = e.target.transaction.objectStore(STORE_NAME);
+          const data = {};
+          oldStore.openCursor().onsuccess = ev => {
+            const cursor = ev.target.result;
+            if (cursor) {
+              data[cursor.key] = cursor.value;
+              cursor.continue();
+            } else {
+              db.deleteObjectStore(STORE_NAME);
+              const newStore = db.createObjectStore(STORE_NAME, { keyPath: "id" });
+              db.createObjectStore(BRANCH_STORE, { keyPath: "id" });
+              const commentsAll = JSON.parse(localStorage.getItem(COMMENT_KEY) || "{}");
+              for (const [date, arr] of Object.entries(data)) {
+                arr.forEach(({ id, text, continued }) => {
+                  newStore.add({
+                    id,
+                    type: "seed",
+                    text,
+                    continued: !!continued,
+                    callCount: 1,
+                    appearedOn: [date],
+                    comments: commentsAll[id] || [],
+                    branchId: null,
+                    treeId: null
+                  });
+                });
+              }
+            }
+          };
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+
+    function getAllSeeds() {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const data = [];
+        store.openCursor().onsuccess = e => {
+          const cursor = e.target.result;
+          if (cursor) {
+            data.push(cursor.value);
+            cursor.continue();
+          } else {
+            resolve(data);
+          }
+        };
+        tx.onerror = () => reject(tx.error);
+      }));
+    }
+
+    function getSeed(id) {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const req = tx.objectStore(STORE_NAME).get(id);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      }));
+    }
+
+    function saveSeed(seed) {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).put(seed);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      }));
+    }
+
+    function saveBranch(branch) {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(BRANCH_STORE, "readwrite");
+        tx.objectStore(BRANCH_STORE).put(branch);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      }));
+    }
+
+    async function migrateFromLocalStorage() {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith(MEMO_PREFIX));
+      const commentsAll = JSON.parse(localStorage.getItem(COMMENT_KEY) || "{}");
+      for (const key of keys) {
+        const date = key.slice(MEMO_PREFIX.length);
+        const value = JSON.parse(localStorage.getItem(key) || "[]");
+        for (const { id, text, continued } of value) {
+          const seed = {
+            id,
+            type: "seed",
+            text,
+            continued: !!continued,
+            callCount: 1,
+            appearedOn: [date],
+            comments: commentsAll[id] || [],
+            branchId: null,
+            treeId: null
+          };
+          await saveSeed(seed);
+        }
+        localStorage.removeItem(key);
+      }
+      localStorage.removeItem(COMMENT_KEY);
+    }
+
+    async function renderSeeds() {
+      await migrateFromLocalStorage();
+      const list = await getAllSeeds();
+      list.sort((a, b) => {
+        const ad = a.appearedOn[a.appearedOn.length - 1] || "";
+        const bd = b.appearedOn[b.appearedOn.length - 1] || "";
+        return bd.localeCompare(ad);
+      });
+      const container = document.getElementById("seedList");
+      container.innerHTML = "";
+      list.forEach(seed => {
+        const label = document.createElement("label");
+        const chk = document.createElement("input");
+        chk.type = "checkbox";
+        chk.value = seed.id;
+        chk.onchange = updateSelected;
+        label.appendChild(chk);
+        const d = seed.appearedOn[seed.appearedOn.length - 1] || "";
+        label.appendChild(document.createTextNode(` [${d}] ${seed.text}`));
+        container.appendChild(label);
+      });
+    }
+
+    function updateSelected() {
+      const selected = Array.from(document.querySelectorAll('#seedList input:checked'));
+      const area = document.getElementById('selectedSeeds');
+      area.innerHTML = selected.map(el => el.parentNode.textContent).join('<br>');
+    }
+
+    async function createBranch() {
+      const name = document.getElementById('branchName').value.trim();
+      const ids = Array.from(document.querySelectorAll('#seedList input:checked')).map(el => el.value);
+      if (!name || ids.length === 0) {
+        alert('Enter a name and select seeds');
+        return;
+      }
+      const branchId = 'branch-' + Date.now() + Math.random().toString(36).slice(2,5);
+      const branch = { id: branchId, name, seedIds: ids, createdAt: new Date().toISOString() };
+      await saveBranch(branch);
+      for (const id of ids) {
+        const seed = await getSeed(id);
+        if (seed) {
+          seed.branchId = branchId;
+          await saveSeed(seed);
+        }
+      }
+      document.getElementById('confirm').style.display = 'block';
+      setTimeout(() => { window.location.href = 'Message.html'; }, 1000);
+    }
+
+    document.getElementById('createBranch').onclick = createBranch;
+    document.addEventListener('DOMContentLoaded', renderSeeds);
+  </script>
+</body>
+</html>
