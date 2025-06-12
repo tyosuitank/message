@@ -201,12 +201,45 @@
     const COMMENT_KEY = "comments";
     const DB_NAME = "thoughtsDB";
     const STORE_NAME = "thoughts";
+    const BRANCH_STORE = "branches";
+    const DB_VERSION = 2;
     const dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = e => {
         const db = e.target.result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME);
+        if (e.oldVersion < 1) {
+          db.createObjectStore(STORE_NAME, { keyPath: "id" });
+          db.createObjectStore(BRANCH_STORE, { keyPath: "id" });
+        } else if (e.oldVersion === 1) {
+          const oldStore = e.target.transaction.objectStore(STORE_NAME);
+          const data = {};
+          oldStore.openCursor().onsuccess = ev => {
+            const cursor = ev.target.result;
+            if (cursor) {
+              data[cursor.key] = cursor.value;
+              cursor.continue();
+            } else {
+              db.deleteObjectStore(STORE_NAME);
+              const newStore = db.createObjectStore(STORE_NAME, { keyPath: "id" });
+              db.createObjectStore(BRANCH_STORE, { keyPath: "id" });
+              const commentsAll = JSON.parse(localStorage.getItem(COMMENT_KEY) || "{}");
+              for (const [date, arr] of Object.entries(data)) {
+                arr.forEach(({ id, text, continued }) => {
+                  newStore.add({
+                    id,
+                    type: "seed",
+                    text,
+                    continued: !!continued,
+                    callCount: 1,
+                    appearedOn: [date],
+                    comments: commentsAll[id] || [],
+                    branchId: null,
+                    treeId: null
+                  });
+                });
+              }
+            }
+          };
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -220,33 +253,45 @@
       return MEMO_PREFIX + date;
     }
 
-    function getThoughts(date = today) {
+    function getSeed(id) {
       return dbPromise.then(db => new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readonly");
-        const req = tx.objectStore(STORE_NAME).get(date);
-        req.onsuccess = () => resolve(req.result || []);
+        const req = tx.objectStore(STORE_NAME).get(id);
+        req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       }));
     }
 
-    function setThoughts(date, data) {
+    function saveSeed(seed) {
       return dbPromise.then(db => new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readwrite");
-        tx.objectStore(STORE_NAME).put(data, date);
+        tx.objectStore(STORE_NAME).put(seed);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
       }));
     }
 
-    function getAllThoughts() {
+    function deleteSeed(id) {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).delete(id);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      }));
+    }
+
+    function getSeedsByDate(date = today) {
       return dbPromise.then(db => new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readonly");
         const store = tx.objectStore(STORE_NAME);
-        const data = {};
+        const data = [];
         store.openCursor().onsuccess = e => {
           const cursor = e.target.result;
           if (cursor) {
-            data[cursor.key] = cursor.value;
+            const seed = cursor.value;
+            if (seed.appearedOn && seed.appearedOn.includes(date)) {
+              data.push(seed);
+            }
             cursor.continue();
           } else {
             resolve(data);
@@ -256,17 +301,65 @@
       }));
     }
 
+    function getAllSeeds() {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const data = [];
+        store.openCursor().onsuccess = e => {
+          const cursor = e.target.result;
+          if (cursor) {
+            data.push(cursor.value);
+            cursor.continue();
+          } else {
+            resolve(data);
+          }
+        };
+        tx.onerror = () => reject(tx.error);
+      }));
+    }
+
+    function getAllBranches() {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        if (!db.objectStoreNames.contains(BRANCH_STORE)) {
+          resolve([]);
+          return;
+        }
+        const tx = db.transaction(BRANCH_STORE, "readonly");
+        const store = tx.objectStore(BRANCH_STORE);
+        const data = [];
+        store.openCursor().onsuccess = e => {
+          const cursor = e.target.result;
+          if (cursor) {
+            data.push(cursor.value);
+            cursor.continue();
+          } else {
+            resolve(data);
+          }
+        };
+        tx.onerror = () => reject(tx.error);
+      }));
+    }
+
+    function saveBranch(branch) {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(BRANCH_STORE, "readwrite");
+        tx.objectStore(BRANCH_STORE).put(branch);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      }));
+    }
+
     async function searchThoughts(query) {
       const q = query.toLowerCase();
-      const all = await getAllThoughts();
+      const all = await getAllSeeds();
       const result = [];
-      for (const [date, arr] of Object.entries(all)) {
-        arr.forEach(({ text }) => {
-          if (text.toLowerCase().includes(q)) {
-            result.push({ date, text });
-          }
-        });
-      }
+      all.forEach(seed => {
+        if (seed.text.toLowerCase().includes(q)) {
+          const date = seed.appearedOn[seed.appearedOn.length - 1] || "";
+          result.push({ id: seed.id, text: seed.text, date });
+        }
+      });
       result.sort((a, b) => b.date.localeCompare(a.date));
       return result.slice(0, 5);
     }
@@ -281,7 +374,7 @@
         const highlighted = item.text.replace(reg, m => `<mark>${m}</mark>`);
         div.innerHTML = `<small>${item.date}</small> ${highlighted}`;
         div.onclick = () => {
-          addBubble(item.text);
+          addBubble(item.text, false, item.id);
           suggestionBox.innerHTML = "";
         };
         suggestionBox.appendChild(div);
@@ -290,33 +383,32 @@
 
     async function migrateFromLocalStorage() {
       const keys = Object.keys(localStorage).filter(k => k.startsWith(MEMO_PREFIX));
+      const commentsAll = JSON.parse(localStorage.getItem(COMMENT_KEY) || "{}");
       for (const key of keys) {
         const date = key.slice(MEMO_PREFIX.length);
         const value = JSON.parse(localStorage.getItem(key) || "[]");
-        await setThoughts(date, value);
+        for (const { id, text, continued } of value) {
+          const seed = {
+            id,
+            type: "seed",
+            text,
+            continued: !!continued,
+            callCount: 1,
+            appearedOn: [date],
+            comments: commentsAll[id] || [],
+            branchId: null,
+            treeId: null
+          };
+          await saveSeed(seed);
+        }
         localStorage.removeItem(key);
       }
-    }
-
-    // 保存
-    async function saveBubbles() {
-      const data = Array.from(container.children).map(div => ({
-        id: div.dataset.id,
-        text: div.textContent,
-        continued: div.dataset.continued === "true"
-      }));
-      await setThoughts(today, data);
-    }
-
-    function saveComments(id, comments) {
-      const allComments = JSON.parse(localStorage.getItem(COMMENT_KEY) || "{}");
-      allComments[id] = comments;
-      localStorage.setItem(COMMENT_KEY, JSON.stringify(allComments));
+      localStorage.removeItem(COMMENT_KEY);
     }
 
     // 読み込み
     async function loadBubbles(date = today) {
-      const data = await getThoughts(date);
+      const data = await getSeedsByDate(date);
       data.forEach(({ id, text, continued }) => createBubble(id, text, continued));
     }
 
@@ -336,10 +428,10 @@
     }
 
     // 吹き出し追加
-  function addBubble(text = null, continued = false) {
+  function addBubble(text = null, continued = false, reuseId = null) {
     const inputText = text !== null ? text : input.value.trim();
     if (inputText === "") return;
-    const id = "id-" + Date.now() + Math.random().toString(36).slice(2, 5);
+    const id = reuseId || "id-" + Date.now() + Math.random().toString(36).slice(2, 5);
 
     createBubble(id, inputText, continued);
     if (text === null) {
@@ -347,7 +439,28 @@
       input.focus();
       suggestionBox.innerHTML = "";
     }
-    saveBubbles();
+    if (reuseId) {
+      getSeed(reuseId).then(seed => {
+        if (!seed) return;
+        seed.callCount = (seed.callCount || 0) + 1;
+        if (!seed.appearedOn.includes(today)) seed.appearedOn.push(today);
+        seed.continued = continued;
+        saveSeed(seed);
+      });
+    } else {
+      const seed = {
+        id,
+        type: "seed",
+        text: inputText,
+        continued,
+        callCount: 1,
+        appearedOn: [today],
+        comments: [],
+        branchId: null,
+        treeId: null
+      };
+      saveSeed(seed);
+    }
   }
 
   input.addEventListener("input", async function () {
@@ -395,63 +508,69 @@
       if (newText !== null && newText.trim() !== "") {
         currentBubble.textContent = newText.trim();
         document.getElementById("modalText").textContent = newText.trim();
-        saveBubbles();
+        getSeed(currentId).then(seed => {
+          if (seed) {
+            seed.text = newText.trim();
+            saveSeed(seed);
+          }
+        });
       }
     }
 
     function deleteCurrentBubble() {
       if (confirm("本当に削除しますか？")) {
         currentBubble.remove();
-        const allComments = JSON.parse(localStorage.getItem(COMMENT_KEY) || "{}");
-        delete allComments[currentId];
-        localStorage.setItem(COMMENT_KEY, JSON.stringify(allComments));
+        deleteSeed(currentId);
         closeModal();
-        saveBubbles();
       }
     }
 
     function submitComment() {
       const commentText = document.getElementById("commentInput").value.trim();
       if (commentText === "") return;
-
-      const allComments = JSON.parse(localStorage.getItem(COMMENT_KEY) || "{}");
-      const comments = allComments[currentId] || [];
-      comments.push(commentText);
-      saveComments(currentId, comments);
-      document.getElementById("commentInput").value = "";
-      renderComments();
+      getSeed(currentId).then(seed => {
+        if (!seed) return;
+        seed.comments = seed.comments || [];
+        seed.comments.push(commentText);
+        saveSeed(seed).then(() => {
+          document.getElementById("commentInput").value = "";
+          renderComments();
+        });
+      });
     }
 
     function renderComments() {
       const list = document.getElementById("commentList");
       list.innerHTML = "";
-      const allComments = JSON.parse(localStorage.getItem(COMMENT_KEY) || "{}");
-      const comments = allComments[currentId] || [];
+      getSeed(currentId).then(seed => {
+        const comments = (seed && seed.comments) || [];
 
-      comments.forEach((text, index) => {
-        const div = document.createElement("div");
-        div.innerHTML = `<span>${text}</span><button onclick="deleteComment(${index})">削除</button>`;
-        list.appendChild(div);
+        comments.forEach((text, index) => {
+          const div = document.createElement("div");
+          div.innerHTML = `<span>${text}</span><button onclick="deleteComment(${index})">削除</button>`;
+          list.appendChild(div);
+        });
       });
     }
 
     function deleteComment(index) {
-      const allComments = JSON.parse(localStorage.getItem(COMMENT_KEY) || "{}");
-      const comments = allComments[currentId] || [];
-      comments.splice(index, 1);
-      saveComments(currentId, comments);
-      renderComments();
+      getSeed(currentId).then(seed => {
+        if (!seed) return;
+        seed.comments.splice(index, 1);
+        saveSeed(seed).then(renderComments);
+      });
     }
 
 
     function showCarryover(list) {
       const area = document.getElementById("carryoverList");
       area.innerHTML = "";
-      list.forEach(({ text }) => {
+      list.forEach(({ id, text }) => {
         const label = document.createElement("label");
         const chk = document.createElement("input");
         chk.type = "checkbox";
-        chk.value = text;
+        chk.dataset.id = id;
+        chk.dataset.text = text;
         label.appendChild(chk);
         label.appendChild(document.createTextNode(" " + text));
         area.appendChild(label);
@@ -461,16 +580,16 @@
 
     function confirmCarryover() {
       document.querySelectorAll("#carryoverList input:checked").forEach(el => {
-        addBubble(el.value, true);
+        addBubble(el.dataset.text, true, el.dataset.id);
       });
       document.getElementById("carryoverModal").style.display = "none";
     }
 
     async function exportData() {
-      const thoughts = await getAllThoughts();
-      const comments = JSON.parse(localStorage.getItem(COMMENT_KEY) || "{}");
+      const seeds = await getAllSeeds();
+      const branches = await getAllBranches();
       const blob = new Blob([
-        JSON.stringify({ thoughts, comments }, null, 2)
+        JSON.stringify({ seeds, branches }, null, 2)
       ], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -486,13 +605,15 @@
       reader.onload = async () => {
         try {
           const data = JSON.parse(reader.result);
-          if (data.thoughts) {
-            for (const [date, arr] of Object.entries(data.thoughts)) {
-              await setThoughts(date, arr);
+          if (data.seeds) {
+            for (const seed of data.seeds) {
+              await saveSeed(seed);
             }
           }
-          if (data.comments) {
-            localStorage.setItem(COMMENT_KEY, JSON.stringify(data.comments));
+          if (data.branches) {
+            for (const br of data.branches) {
+              await saveBranch(br);
+            }
           }
           location.reload();
         } catch (e) {
@@ -510,7 +631,7 @@
         .toISOString()
         .slice(0, 10);
       if (lastOpen !== today) {
-        const yData = await getThoughts(yesterday);
+        const yData = await getSeedsByDate(yesterday);
         if (yData.length) showCarryover(yData);
       }
       localStorage.setItem(LAST_DATE_KEY, today);
