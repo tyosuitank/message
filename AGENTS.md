@@ -1,39 +1,52 @@
 # AGENTS.md
 
-## 🎯 App Purpose
-This is a personal thought-recording app for a single iPhone user (me).  
-The goal is to:
-- Write down what I'm thinking today
-- Review what I was thinking yesterday
-- Carry over ongoing thoughts to the next day
-- See past thoughts grouped by date (in a simple, scrollable format)
+This document outlines the current state and data architecture of the “Bubble Memo App.”
 
-I use this app every morning on Safari.
+## Purpose
+
+A thought reflection tool to capture what you were thinking yesterday, and plan what you're thinking today. Ideas evolve from **Seed → Branch → Tree**, following a plant-based metaphor.
+
+## Glossary
+
+| Term   | Meaning                            | Notes                                      |
+| ------ | ---------------------------------- | ------------------------------------------ |
+| Seed   | A single recorded thought          | Includes date, call count, and comments    |
+| Leaf   | A comment or sub-thought of a Seed | Recorded via modal popup                   |
+| Branch | A manual grouping of similar Seeds | Created in a dedicated branch editor page  |
+| Tree   | A promoted Seed or Branch          | Becomes a "Tree" based on usage conditions |
+
+## Storage
+
+* **IndexedDB**
+
+  * `thoughts`: Stores Seed objects by date (v2+ supports metadata like call count, appeared dates, comments)
+  * `branches`: Stores Branches as selected groups of Seeds
+
+* **localStorage**
+
+  * `comments`: Legacy Leaf storage
+  * `last-open-date`: Used for carryover logic at app start
+
+## Implemented Features
+
+* Thought registration, editing, and deletion (Seed)
+* Comment (Leaf) addition and deletion per thought
+* IndexedDB-backed storage and data migration (v1 → v2)
+* Carryover modal for yesterday's thoughts
+* Search bar to suggest reusable thoughts from past Seeds
+* Call counter increments when Seeds are reused
+* JSON export/import of full IndexedDB and Leaf data
+* `branch.html`: Dedicated page to form Branches
+* Responsive UI, modals, and mobile-first layout
+
+## Upcoming Features
+
+* Grouping of same text entries (e.g. “Grandma’s House (2x)”)
+* Browsable Branch index
+* Tree promotion logic (e.g. 30+ calls or 50+ Leaves)
+* Visual indicator or label for Trees
+* Better metadata aggregation for insight (e.g. trending Seeds)
 
 ---
 
-## 🎛️ Design Preferences
-- The app should feel lightweight and simple
-- No user login is needed
-- It should be offline-friendly
-- I like the current bubble-style UI, please keep it
-
----
-
-## 🤖 AI Agent Instructions
-- You may improve, clean up, or refactor code as needed
-- Please preserve:
-  - The structure of `Message.html` and `history.html`
-  - Existing functionality (carry-over, comment modal, history)
-- Use `IndexedDB` (not localStorage) to store data
-- Add features like export/import, search, or tagging if useful
-
-Be creative if you think of something helpful—but don’t break the current experience.  
-Assume this is a personal tool, not a public-facing app.
-
----
-
-## 📂 File Overview
-- `Message.html`: Main input and view for today's thoughts
-- `history.html`: Read-only scrollable list of past thoughts
-- `AGENTS.md`: You're reading it!
+This document will be updated as the app evolves.
