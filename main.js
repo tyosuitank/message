@@ -1,6 +1,6 @@
-    const input = document.getElementById("textInput");
-    const container = document.getElementById("bubbleContainer");
-    const suggestionBox = document.getElementById("suggestions");
+    let input = null;
+    let container = null;
+    let suggestionBox = null;
     let lastEnterTime = 0;
     const MEMO_PREFIX = "memo-";
     const LAST_DATE_KEY = "last-open-date";
@@ -317,12 +317,17 @@
       }
     }
 
-    input.addEventListener("input", async function () {
-      const query = input.value.trim();
-      if (!query) {
-        suggestionBox.innerHTML = "";
-        return;
-      }
+    if (location.pathname.endsWith("Message.html")) {
+      input = document.getElementById("textInput");
+      container = document.getElementById("bubbleContainer");
+      suggestionBox = document.getElementById("suggestions");
+
+      input.addEventListener("input", async function () {
+        const query = input.value.trim();
+        if (!query) {
+          suggestionBox.innerHTML = "";
+          return;
+        }
       const matches = await searchThoughts(query);
       if (matches.length) {
         renderSuggestions(matches, query);
@@ -332,16 +337,50 @@
     });
 
     // Enter2回で送信
-    input.addEventListener("keydown", function (event) {
-      if (event.key === "Enter") {
-        const now = Date.now();
-        if (now - lastEnterTime < 500) {
-          event.preventDefault();
-          addBubble();
+      input.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          const now = Date.now();
+          if (now - lastEnterTime < 500) {
+            event.preventDefault();
+            addBubble();
+          }
+          lastEnterTime = now;
         }
-        lastEnterTime = now;
+      });
+
+      // 日付変更処理
+      async function startNewDay(prevDate) {
+        container.innerHTML = "";
+        input.value = "";
+        await loadBubbles();
+        const yData = await getSeedsByDate(prevDate);
+        if (yData.length) showCarryover(yData);
+        localStorage.setItem(LAST_DATE_KEY, today);
       }
-    });
+
+      async function checkNewDay() {
+        const now = getToday();
+        if (now !== today) {
+          const prev = today;
+          today = now;
+          await startNewDay(prev);
+        }
+      }
+
+      // 初期化
+      (async function () {
+        await migrateFromLocalStorage();
+        const lastOpen = localStorage.getItem(LAST_DATE_KEY);
+        if (!lastOpen || lastOpen !== today) {
+          await startNewDay(lastOpen || getYesterday());
+        } else {
+          localStorage.setItem(LAST_DATE_KEY, today);
+          await loadBubbles();
+        }
+        setInterval(checkNewDay, 60000);
+        window.addEventListener("focus", checkNewDay);
+      })();
+    }
 
     // モーダル関連
     function openModal(bubble) {
@@ -478,38 +517,6 @@
       reader.readAsText(file);
     }
 
-    // 日付変更処理
-    async function startNewDay(prevDate) {
-      container.innerHTML = "";
-      input.value = "";
-      await loadBubbles();
-      const yData = await getSeedsByDate(prevDate);
-      if (yData.length) showCarryover(yData);
-      localStorage.setItem(LAST_DATE_KEY, today);
-    }
-
-    async function checkNewDay() {
-      const now = getToday();
-      if (now !== today) {
-        const prev = today;
-        today = now;
-        await startNewDay(prev);
-      }
-    }
-
-    // 初期化
-    (async function () {
-      await migrateFromLocalStorage();
-      const lastOpen = localStorage.getItem(LAST_DATE_KEY);
-      if (!lastOpen || lastOpen !== today) {
-        await startNewDay(lastOpen || getYesterday());
-      } else {
-        localStorage.setItem(LAST_DATE_KEY, today);
-        await loadBubbles();
-      }
-      setInterval(checkNewDay, 60000);
-    window.addEventListener("focus", checkNewDay);
-    })();
 
     // Branch editor page
     if (location.pathname.endsWith("branch.html")) {
