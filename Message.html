@@ -254,6 +254,7 @@
       return new Date().toISOString().slice(0, 10);
     }
 
+    // Get the previous calendar day in YYYY-MM-DD format
     function getYesterday() {
       return new Date(Date.now() - 86400000).toISOString().slice(0, 10);
     }
@@ -635,6 +636,7 @@
     }
 
     // 日付変更処理
+    // Reset UI for a fresh day and offer to carry over selected thoughts
     async function startNewDay(prevDate) {
       container.innerHTML = "";
       input.value = "";
