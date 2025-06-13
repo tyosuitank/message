@@ -6,9 +6,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.PNG">
   <title>吹き出しメモアプリ</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
     body {
       font-family: sans-serif;
       background: #f4f4f4;
@@ -16,137 +14,62 @@
       max-width: 700px;
       margin: 0 auto;
     }
-    #inputArea {
-      margin-bottom: 20px;
-    }
+    #inputArea { margin-bottom: 20px; }
     textarea {
-      width: 100%;
-      padding: 12px;
-      font-size: 16px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      resize: vertical;
-      line-height: 1.5;
+      width: 100%; padding: 12px; font-size: 16px; border-radius: 8px;
+      border: 1px solid #ccc; resize: vertical; line-height: 1.5;
     }
     .bubble {
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 16px;
-      padding: 12px 16px;
-      margin: 10px 0;
-      cursor: pointer;
-      transition: background 0.3s;
-      word-wrap: break-word;
-      font-size: 16px;
+      background: white; border: 1px solid #ccc; border-radius: 16px;
+      padding: 12px 16px; margin: 10px 0; cursor: pointer;
+      transition: background 0.3s; word-wrap: break-word; font-size: 16px;
     }
-    .bubble:hover {
-      background: #f9f9f9;
-    }
+    .bubble:hover { background: #f9f9f9; }
     @media screen and (max-width: 600px) {
-      body {
-        padding: 16px;
-      }
-      textarea {
-        font-size: 18px;
-        padding: 14px;
-      }
-      .bubble {
-        font-size: 17px;
-        padding: 14px;
-      }
+      body { padding: 16px; }
+      textarea { font-size: 18px; padding: 14px; }
+      .bubble { font-size: 17px; padding: 14px; }
     }
-
     /* モーダル */
     #modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: #00000088;
-      z-index: 1000;
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%; background: #00000088; z-index: 1000;
     }
     #modalContent {
-      background: white;
-      padding: 20px;
-      margin: 60px auto;
-      max-width: 500px;
-      border-radius: 12px;
-      position: relative;
+      background: white; padding: 20px; margin: 60px auto; max-width: 500px;
+      border-radius: 12px; position: relative;
     }
     #modal button.close {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      font-size: 18px;
-      background: none;
-      border: none;
-      cursor: pointer;
+      position: absolute; top: 10px; right: 10px; font-size: 18px;
+      background: none; border: none; cursor: pointer;
     }
-    #modalText {
-      white-space: pre-wrap;
-    }
+    #modalText { white-space: pre-wrap; }
     #commentInput {
-      width: 100%;
-      padding: 8px;
-      margin-top: 8px;
-      font-size: 14px;
+      width: 100%; padding: 8px; margin-top: 8px; font-size: 14px;
     }
     #commentList div {
-      margin-top: 6px;
-      padding: 6px 10px;
-      background: #eee;
-      border-radius: 6px;
-      display: flex;
-      justify-content: space-between;
+      margin-top: 6px; padding: 6px 10px; background: #eee;
+      border-radius: 6px; display: flex; justify-content: space-between;
       align-items: center;
     }
     #commentList button {
-      background: none;
-      border: none;
-      color: #c00;
-      cursor: pointer;
-      margin-left: 10px;
+      background: none; border: none; color: #c00; cursor: pointer; margin-left: 10px;
     }
-
     /* Suggestions */
-    #suggestions {
-      margin-top: 4px;
-    }
+    #suggestions { margin-top: 4px; }
     .suggestion {
-      background: #fff;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      padding: 6px;
-      margin-top: 4px;
-      cursor: pointer;
-      font-size: 14px;
+      background: #fff; border: 1px solid #ccc; border-radius: 6px;
+      padding: 6px; margin-top: 4px; cursor: pointer; font-size: 14px;
     }
-
     /* 引き継ぎモーダル */
     #carryoverModal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: #00000088;
-      z-index: 1000;
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%; background: #00000088; z-index: 1000;
     }
     #carryoverContent {
-      background: white;
-      padding: 20px;
-      margin: 60px auto;
-      max-width: 500px;
-      border-radius: 12px;
+      background: white; padding: 20px; margin: 60px auto; max-width: 500px; border-radius: 12px;
     }
-    #carryoverList label {
-      display: block;
-      margin: 4px 0;
-    }
-
+    #carryoverList label { display: block; margin: 4px 0; }
   </style>
 </head>
 <body>
@@ -155,7 +78,6 @@
     <div id="suggestions"></div>
   </div>
   <div id="bubbleContainer"></div>
-
   <!-- 引き継ぎモーダル -->
   <div id="carryoverModal">
     <div id="carryoverContent">
@@ -164,7 +86,6 @@
       <button onclick="confirmCarryover()">今日に引き継ぐ</button>
     </div>
   </div>
-
   <div style="margin-top:40px;">
     <a href="history.html">▶ View past records</a>
     <span style="margin:0 6px;"></span>
@@ -173,7 +94,6 @@
     <input type="file" id="importInput" accept="application/json" style="display:none" onchange="importData(this.files[0])">
     <button onclick="document.getElementById('importInput').click()">Import</button>
   </div>
-
   <!-- モーダル -->
   <div id="modal">
     <div id="modalContent">
@@ -254,10 +174,12 @@
       return new Date().toISOString().slice(0, 10);
     }
 
-// Get the previous calendar day in YYYY-MM-DD format
-function getYesterday() {
-  return new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-}
+    // ローカルタイムで「昨日」を取得
+    function getYesterday() {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return d.toISOString().slice(0, 10);
+    }
     let today = getToday();
 
     function getStorageKey(date = today) {
@@ -439,57 +361,57 @@ function getYesterday() {
     }
 
     // 吹き出し追加
-  function addBubble(text = null, continued = false, reuseId = null) {
-    const inputText = text !== null ? text : input.value.trim();
-    if (inputText === "") return;
-    const id = reuseId || "id-" + Date.now() + Math.random().toString(36).slice(2, 5);
+    function addBubble(text = null, continued = false, reuseId = null) {
+      const inputText = text !== null ? text : input.value.trim();
+      if (inputText === "") return;
+      const id = reuseId || "id-" + Date.now() + Math.random().toString(36).slice(2, 5);
 
-    createBubble(id, inputText, continued);
-    if (text === null) {
-      input.value = "";
-      input.focus();
-      suggestionBox.innerHTML = "";
-    }
-    if (reuseId) {
-      getSeed(reuseId).then(seed => {
-        if (!seed) return;
-        seed.callCount = (seed.callCount || 0) + 1;
-        if (!seed.appearedOn.includes(today)) seed.appearedOn.push(today);
-        seed.continued = continued;
+      createBubble(id, inputText, continued);
+      if (text === null) {
+        input.value = "";
+        input.focus();
+        suggestionBox.innerHTML = "";
+      }
+      if (reuseId) {
+        getSeed(reuseId).then(seed => {
+          if (!seed) return;
+          seed.callCount = (seed.callCount || 0) + 1;
+          if (!seed.appearedOn.includes(today)) seed.appearedOn.push(today);
+          seed.continued = continued;
+          saveSeed(seed);
+        });
+      } else {
+        const seed = {
+          id,
+          type: "seed",
+          text: inputText,
+          continued,
+          callCount: 1,
+          appearedOn: [today],
+          comments: [],
+          branchId: null,
+          treeId: null
+        };
         saveSeed(seed);
-      });
-    } else {
-      const seed = {
-        id,
-        type: "seed",
-        text: inputText,
-        continued,
-        callCount: 1,
-        appearedOn: [today],
-        comments: [],
-        branchId: null,
-        treeId: null
-      };
-      saveSeed(seed);
+      }
     }
-  }
 
-  input.addEventListener("input", async function () {
-    const query = input.value.trim();
-    if (!query) {
-      suggestionBox.innerHTML = "";
-      return;
-    }
-    const matches = await searchThoughts(query);
-    if (matches.length) {
-      renderSuggestions(matches, query);
-    } else {
-      suggestionBox.innerHTML = "";
-    }
-  });
+    input.addEventListener("input", async function () {
+      const query = input.value.trim();
+      if (!query) {
+        suggestionBox.innerHTML = "";
+        return;
+      }
+      const matches = await searchThoughts(query);
+      if (matches.length) {
+        renderSuggestions(matches, query);
+      } else {
+        suggestionBox.innerHTML = "";
+      }
+    });
 
-  // Enter2回で送信
-  input.addEventListener("keydown", function (event) {
+    // Enter2回で送信
+    input.addEventListener("keydown", function (event) {
       if (event.key === "Enter") {
         const now = Date.now();
         if (now - lastEnterTime < 500) {
@@ -572,7 +494,6 @@ function getYesterday() {
       });
     }
 
-
     function showCarryover(list) {
       const area = document.getElementById("carryoverList");
       area.innerHTML = "";
@@ -635,14 +556,6 @@ function getYesterday() {
     }
 
     // 日付変更処理
-async function startNewDay(prevDate) {
-  container.innerHTML = "";
-  input.value = "";
-  await loadBubbles();
-  const yData = await getSeedsByDate(prevDate);
-  if (yData.length) showCarryover(yData);
-  localStorage.setItem(LAST_DATE_KEY, today);
-}
     async function startNewDay(prevDate) {
       container.innerHTML = "";
       input.value = "";
@@ -665,18 +578,8 @@ async function startNewDay(prevDate) {
     (async function () {
       await migrateFromLocalStorage();
       const lastOpen = localStorage.getItem(LAST_DATE_KEY);
-(async function () {
-  await migrateFromLocalStorage();
-  const lastOpen = localStorage.getItem(LAST_DATE_KEY);
-  if (!lastOpen || lastOpen !== today) {
-    await startNewDay(lastOpen || getYesterday());
-  } else {
-    localStorage.setItem(LAST_DATE_KEY, today);
-    await loadBubbles();
-  }
-  setInterval(checkNewDay, 60000);
-  window.addEventListener("focus", checkNewDay);
-})();
+      if (!lastOpen || lastOpen !== today) {
+        await startNewDay(lastOpen || getYesterday());
       } else {
         localStorage.setItem(LAST_DATE_KEY, today);
         await loadBubbles();
