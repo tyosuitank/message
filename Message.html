@@ -61,6 +61,10 @@
       background: #fff; border: 1px solid #ccc; border-radius: 6px;
       padding: 6px; margin-top: 4px; cursor: pointer; font-size: 14px;
     }
+    .branch-tag {
+      background: #d0eaff; color: #036; border-radius: 8px;
+      padding: 2px 6px; margin-left: 6px; font-size: 12px;
+    }
     /* 引き継ぎモーダル */
     #carryoverModal {
       display: none; position: fixed; top: 0; left: 0;
@@ -274,6 +278,19 @@
       }));
     }
 
+    function getBranch(id) {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        if (!db.objectStoreNames.contains(BRANCH_STORE)) {
+          resolve(null);
+          return;
+        }
+        const tx = db.transaction(BRANCH_STORE, "readonly");
+        const req = tx.objectStore(BRANCH_STORE).get(id);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      }));
+    }
+
     function saveBranch(branch) {
       return dbPromise.then(db => new Promise((resolve, reject) => {
         const tx = db.transaction(BRANCH_STORE, "readwrite");
@@ -341,17 +358,35 @@
 
     // 読み込み
     async function loadBubbles(date = today) {
-      const data = await getSeedsByDate(date);
-      data.forEach(({ id, text, continued }) => createBubble(id, text, continued));
+      const [data, branches] = await Promise.all([
+        getSeedsByDate(date),
+        getAllBranches()
+      ]);
+      const map = {};
+      branches.forEach(b => { map[b.id] = b.name; });
+      data.forEach(({ id, text, continued, branchId }) => {
+        createBubble(id, text, continued, map[branchId]);
+      });
     }
 
     // 吹き出し生成
-    function createBubble(id, text, continued = false) {
+    function createBubble(id, text, continued = false, branchName = null) {
       const div = document.createElement("div");
       div.className = "bubble";
-      div.textContent = text;
       div.dataset.id = id;
       div.dataset.continued = continued;
+      div.dataset.text = text;
+
+      const textSpan = document.createElement("span");
+      textSpan.className = "bubble-text";
+      textSpan.textContent = text;
+      div.appendChild(textSpan);
+      if (branchName) {
+        const tag = document.createElement("span");
+        tag.className = "branch-tag";
+        tag.textContent = branchName;
+        div.appendChild(tag);
+      }
 
       div.onclick = function () {
         openModal(this);
@@ -361,25 +396,24 @@
     }
 
     // 吹き出し追加
-    function addBubble(text = null, continued = false, reuseId = null) {
+    async function addBubble(text = null, continued = false, reuseId = null) {
       const inputText = text !== null ? text : input.value.trim();
       if (inputText === "") return;
       const id = reuseId || "id-" + Date.now() + Math.random().toString(36).slice(2, 5);
+      let branchName = null;
 
-      createBubble(id, inputText, continued);
-      if (text === null) {
-        input.value = "";
-        input.focus();
-        suggestionBox.innerHTML = "";
-      }
       if (reuseId) {
-        getSeed(reuseId).then(seed => {
-          if (!seed) return;
+        const seed = await getSeed(reuseId);
+        if (seed) {
           seed.callCount = (seed.callCount || 0) + 1;
           if (!seed.appearedOn.includes(today)) seed.appearedOn.push(today);
           seed.continued = continued;
-          saveSeed(seed);
-        });
+          await saveSeed(seed);
+          if (seed.branchId) {
+            const br = await getBranch(seed.branchId);
+            branchName = br ? br.name : null;
+          }
+        }
       } else {
         const seed = {
           id,
@@ -392,7 +426,14 @@
           branchId: null,
           treeId: null
         };
-        saveSeed(seed);
+        await saveSeed(seed);
+      }
+
+      createBubble(id, inputText, continued, branchName);
+      if (text === null) {
+        input.value = "";
+        input.focus();
+        suggestionBox.innerHTML = "";
       }
     }
 
@@ -426,7 +467,7 @@
     function openModal(bubble) {
       currentBubble = bubble;
       currentId = bubble.dataset.id;
-      document.getElementById("modalText").textContent = bubble.textContent;
+      document.getElementById("modalText").textContent = bubble.dataset.text;
       document.getElementById("commentInput").value = "";
       renderComments();
       document.getElementById("modal").style.display = "block";
@@ -437,9 +478,11 @@
     }
 
     function editCurrentBubble() {
-      const newText = prompt("新しい内容を入力してください", currentBubble.textContent);
+      const newText = prompt("新しい内容を入力してください", currentBubble.dataset.text);
       if (newText !== null && newText.trim() !== "") {
-        currentBubble.textContent = newText.trim();
+        const span = currentBubble.querySelector(".bubble-text");
+        if (span) span.textContent = newText.trim();
+        currentBubble.dataset.text = newText.trim();
         document.getElementById("modalText").textContent = newText.trim();
         getSeed(currentId).then(seed => {
           if (seed) {
