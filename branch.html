@@ -34,10 +34,17 @@
       color: green;
       margin-top: 10px;
     }
+    .branch-item { margin-bottom: 10px; }
+    .branch-item .seeds { margin-left: 15px; }
+    .branch-item .seed { margin:4px 0; font-size:14px; }
+    .branch-item button { margin-left:6px; }
   </style>
 </head>
 <body>
   <h2>Branch Editor</h2>
+  <div id="branchList" style="margin-bottom:20px;"></div>
+  <hr />
+  <h3>Create New Branch</h3>
   <div id="seedList"></div>
   <div id="selectedSeeds"></div>
   <div style="margin-top:15px;">
@@ -134,6 +141,40 @@
       }));
     }
 
+    function getAllBranches() {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        if (!db.objectStoreNames.contains(BRANCH_STORE)) {
+          resolve([]);
+          return;
+        }
+        const tx = db.transaction(BRANCH_STORE, "readonly");
+        const data = [];
+        tx.objectStore(BRANCH_STORE).openCursor().onsuccess = e => {
+          const cursor = e.target.result;
+          if (cursor) {
+            data.push(cursor.value);
+            cursor.continue();
+          } else {
+            resolve(data);
+          }
+        };
+        tx.onerror = () => reject(tx.error);
+      }));
+    }
+
+    function getBranch(id) {
+      return dbPromise.then(db => new Promise((resolve, reject) => {
+        if (!db.objectStoreNames.contains(BRANCH_STORE)) {
+          resolve(null);
+          return;
+        }
+        const tx = db.transaction(BRANCH_STORE, "readonly");
+        const req = tx.objectStore(BRANCH_STORE).get(id);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      }));
+    }
+
     function saveBranch(branch) {
       return dbPromise.then(db => new Promise((resolve, reject) => {
         const tx = db.transaction(BRANCH_STORE, "readwrite");
@@ -170,7 +211,14 @@
 
     async function renderSeeds() {
       await migrateFromLocalStorage();
-      const list = await getAllSeeds();
+      const [list, branches] = await Promise.all([
+        getAllSeeds(),
+        getAllBranches()
+      ]);
+      const map = {};
+      branches.forEach(b => {
+        b.seedIds.forEach(id => { map[id] = b.name; });
+      });
       list.sort((a, b) => {
         const ad = a.appearedOn[a.appearedOn.length - 1] || "";
         const bd = b.appearedOn[b.appearedOn.length - 1] || "";
@@ -184,9 +232,14 @@
         chk.type = "checkbox";
         chk.value = seed.id;
         chk.onchange = updateSelected;
+        if (seed.branchId) {
+          chk.disabled = true;
+        }
         label.appendChild(chk);
         const d = seed.appearedOn[seed.appearedOn.length - 1] || "";
-        label.appendChild(document.createTextNode(` [${d}] ${seed.text}`));
+        let text = ` [${d}] ${seed.text}`;
+        if (seed.branchId && map[seed.id]) text += ` (in ${map[seed.id]})`;
+        label.appendChild(document.createTextNode(text));
         container.appendChild(label);
       });
     }
@@ -195,6 +248,77 @@
       const selected = Array.from(document.querySelectorAll('#seedList input:checked'));
       const area = document.getElementById('selectedSeeds');
       area.innerHTML = selected.map(el => el.parentNode.textContent).join('<br>');
+    }
+
+    async function renderBranches() {
+      const container = document.getElementById('branchList');
+      const branches = await getAllBranches();
+      branches.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+      container.innerHTML = '';
+      branches.forEach(br => {
+        const div = document.createElement('div');
+        div.className = 'branch-item';
+        const header = document.createElement('div');
+        const link = document.createElement('span');
+        link.style.cursor = 'pointer';
+        link.textContent = br.name;
+        link.onclick = () => toggleBranchDetail(br.id);
+        header.appendChild(link);
+        header.appendChild(document.createTextNode(` (${br.seedIds.length}) - ${br.createdAt.slice(0,10)}`));
+        div.appendChild(header);
+        const inner = document.createElement('div');
+        inner.className = 'seeds';
+        inner.id = 'detail-' + br.id;
+        inner.style.display = 'none';
+        div.appendChild(inner);
+        container.appendChild(div);
+      });
+    }
+
+    async function toggleBranchDetail(branchId) {
+      const area = document.getElementById('detail-' + branchId);
+      if (!area) return;
+      if (area.style.display === 'block') {
+        area.style.display = 'none';
+        return;
+      }
+      const branch = await getBranch(branchId);
+      area.innerHTML = '';
+      for (const id of branch.seedIds) {
+        const seed = await getSeed(id);
+        if (!seed) continue;
+        const div = document.createElement('div');
+        div.className = 'seed';
+        const span = document.createElement('span');
+        span.textContent = `${seed.text} (x${seed.callCount || 0})`;
+        div.appendChild(span);
+        if (seed.comments && seed.comments.length) {
+          const c = document.createElement('div');
+          c.style.fontSize = '12px';
+          c.textContent = 'Comments: ' + seed.comments.join(', ');
+          div.appendChild(c);
+        }
+        const btn = document.createElement('button');
+        btn.textContent = 'Remove';
+        btn.onclick = () => removeSeedFromBranch(branchId, id);
+        div.appendChild(btn);
+        area.appendChild(div);
+      }
+      area.style.display = 'block';
+    }
+
+    async function removeSeedFromBranch(branchId, seedId) {
+      const branch = await getBranch(branchId);
+      if (!branch) return;
+      branch.seedIds = branch.seedIds.filter(id => id !== seedId);
+      await saveBranch(branch);
+      const seed = await getSeed(seedId);
+      if (seed) {
+        seed.branchId = null;
+        await saveSeed(seed);
+      }
+      await renderBranches();
+      await renderSeeds();
     }
 
     async function createBranch() {
@@ -215,11 +339,16 @@
         }
       }
       document.getElementById('confirm').style.display = 'block';
-      setTimeout(() => { window.location.href = 'Message.html'; }, 1000);
+      document.getElementById('branchName').value = '';
+      await renderBranches();
+      await renderSeeds();
     }
 
     document.getElementById('createBranch').onclick = createBranch;
-    document.addEventListener('DOMContentLoaded', renderSeeds);
+    document.addEventListener('DOMContentLoaded', () => {
+      renderSeeds();
+      renderBranches();
+    });
   </script>
 </body>
 </html>
